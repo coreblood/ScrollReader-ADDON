@@ -42,7 +42,7 @@ About **5 seconds after you leave a 5-man dungeon** (party instance), ScrollRead
 
 ## Minimap button
 
-Reads **all six types at once** under a single confirmation. Free-form left-drag placement (exact position, no ring snapping; safe with scaled minimaps), with a badge showing the grand total held. *(The separate on-screen master button was removed in 1.2.2 — the bar and the minimap button cover both workflows.)*
+Reads **all six types at once**, immediately (no confirmation). Free-form left-drag placement (exact position, no ring snapping; safe with scaled minimaps), with a badge showing the grand total held. *(The separate on-screen master button was removed in 1.2.2 — the bar and the minimap button cover both workflows.)*
 
 ## Slash commands
 

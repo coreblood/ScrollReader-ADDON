@@ -1,0 +1,62 @@
+# ScrollReader -- Changelog
+
+## v1.3.0 -- 2026-09-27
+
+- New: dungeon-exit auto-read (idea borrowed from UncappedAutoScroll). ~5s after leaving a party instance, Scroll of Mastery and Scroll of the Delver are bulk-read automatically when 300+ are held. The chain spam-pushes SCRALL (keeps re-sending even on used=0) until bags are clean, capped at 40 sends per type. Combat holds it. On by default; /sr dungeon toggles.
+- A type whose chain is already running is no longer queued twice.
+- Reply-watchdog timeout now also clears that type's chain state.
+
+## v1.2.3 -- 2026-09-14
+
+- Confirmation dialog removed for all six types, by owner decision: every trigger (bar click, keybind, minimap, /sr) sends SCRALL immediately. The SCRDONE chat line is the receipt. Map auto-chain unchanged. Note this deliberately trades away the accidental-keypress safety net.
+
+## v1.2.2 -- 2026-09-14
+
+- Removed the on-screen master button (the standalone floating scroll icon). The bar covers per-type reading and the minimap button (or /sr) covers read-everything; the extra button was redundant. Its stale saved-variables entry is cleaned on load, and /sr button is gone from the slash commands.
+
+## v1.2.1 -- 2026-09-14
+
+Server landed bulk support for both custom scrolls (Wildcard Transmog Scroll = 500201, Sealed Traveler's Map = 500200, per Dashboard [#1350]/[#1360]); this patch adapts to the maps' server rules.
+
+- Auto-chain for the 500-per-call map cap: one confirmation covers the full stack, and ScrollReader re-sends SCRALL until your bags are empty of that type (bag scan as the loop condition, deliberately -- SCRDONE's held counts bank copies SCRALL can't touch, and chaining on it would loop forever). A used=0 reply ends a chain; a 40-send budget caps it outright. One summary line replaces per-call chatter ("read 1398 ... over 3 calls").
+- Map-aware confirmation: confirming >500 maps notes the 500-per-call rule and the auto-repeat.
+- Combat holds the send queue (new sends and chained re-sends) and resumes after; previously only button presses were gated.
+- Manual updated: whitelist now fully live; map rules (flight-path requirement, no-award consumption, socket-scroll chance) documented.
+
+## v1.2.0 -- 2026-09-14
+
+Six-type keybindable bulk bar.
+
+- New: the bar -- a draggable horizontal bar of six buttons (Wildcard Transmog Scroll, Sealed Traveler's Map, Scroll of Mastery, Scroll of the Delver, Scroll of Reach, Scroll of Bounty), each with the item's live icon, a held-count badge, and a tooltip showing its current keybind. Press = bulk-read that type via SCRALL. Empty types grey out. Dragging any part moves the bar; position persisted (/sr bar toggles it).
+- New: keybindings -- Bindings.xml exposes one binding per type under ESC -> Key Bindings -> ScrollReader ("Read all: <scroll>"). Keybinds behave exactly like clicks, confirmation dialog included (dialog-every-press was the chosen policy).
+- Master buttons widened: the minimap and on-screen buttons (and /sr) now sweep all six types in one confirmation; their badges show the grand total held.
+- Icons resolve live via GetItemIcon from bag-link entries; the four kirei scrolls carry their known entries (500203/500204/500205/500207) as icon fallbacks. Sends still use only live bag-link entries.
+- /sr count now lists all six types.
+- /sr reset resets all three movables (minimap, on-screen button, bar).
+- Live-test note folded into the manual: rejection is not silence on this realm -- non-whitelisted entries get SCRDONE used=0 plus a server explanation line, so the 6s watchdog is a never-fires edge case here.
+
+## v1.1.0 -- 2026-09-07
+
+Rework: server-verb bulk consume. v1.0.0's UseContainerItem sweep was taint-blocked in-game ("blocked from an action only available to the Blizzard UI") -- these scrolls cast a spell on use, and protected calls can't be looped from addon code. v1.1.0 adopts the server's own mass-consume mechanism, as used by the Dashboard's "Use in bulk" buttons.
+
+- True one-press burst: sends SCRALL:<itemEntry> (transport REAGENTBANK) per scroll type; the server consumes every bag copy in one call. Requests are spaced 1.2s apart.
+- Confirmation dialog before anything is sent, quoting exact counts and names -- the scrolls are destroyed with no undo (suite consent rule).
+- SCRDONE:<entry>:<used>:<held> reply handling -- three fields, matching what the server actually sends (the historical two-field pattern in UncappedScrolls was a known dead branch; not repeated here). Chat summary of spent/remaining; suppressed when the Uncapped Dashboard is loaded, since its [Scrolls] handler already prints one.
+- 6s reply watchdog: silence means the server's SCRALL whitelist likely doesn't cover the entry -- the addon says so and prints the entry ID for a one-line admin ask.
+- Live count badges on both buttons (total matching scrolls held; hidden at zero; refreshed on BAG_UPDATE).
+- Item entries resolved from bag links by exact title at click time -- no hardcoded IDs.
+- New /sr count -- per-type counts plus entry IDs.
+- Removed: the v1.0.0 client-side UseContainerItem sweep and its per-click leftover semantics (obsolete -- the server call is exhaustive).
+
+## v1.0.0 -- 2026-09-07
+
+Initial release.
+
+- Burst reader for exact titles Wildcard Transmog Scroll and Sealed Traveler's Map: one click sweeps bags 0–4 and uses every matching, unlocked item. *(Superseded in v1.1.0 -- this approach is taint-blocked for spell-casting items.)*
+- Chat report per sweep with total and per-title counts; "no matching scrolls" when bags are clean.
+- Minimap button with free-form drag (exact x/y from minimap center, no ring snapping; canonical LibDBIcon texture layout) -- safe with scaled minimaps.
+- On-screen button (36x36, draggable, clamped to screen, position persisted).
+- Slash commands: /sr (/scrollread), /sr button, /sr minimap, /sr reset.
+- Combat gating: both buttons desaturate and ignore clicks in combat; state also detected correctly when logging in mid-combat.
+- SavedVariables: ScrollReaderDB (button positions + visibility only).
+- 3.3.5a-safe: no C_Timer, no SetShown, all UI built after ADDON_LOADED.
