@@ -1,6 +1,6 @@
 # ScrollReader — Manual
 
-**Version:** 1.2.3 · **Client:** WotLK 3.3.5a · **Server:** Uncapped
+**Version:** 1.3.0 · **Client:** WotLK 3.3.5a · **Server:** Uncapped
 
 ## What it does
 
@@ -31,6 +31,15 @@ Each of the six buttons can be bound to a key: **ESC → Key Bindings → scroll
 
 Item entries are resolved live from your bag links by exact title — you can only bulk what you hold, so bags are always a sufficient source of the ID.
 
+## Dungeon-exit auto-read (new in 1.3.0)
+
+About **5 seconds after you leave a 5-man dungeon** (party instance), ScrollReader checks your bags for **Scroll of Mastery** and **Scroll of the Delver**. Any of those two you hold **300 or more** of gets bulk-read automatically — no press needed. Other types are never auto-read.
+
+- It **spam-pushes**: `SCRALL` is re-sent every 1.2s until your bags are empty of that type, even if the server answers "none used", up to 40 sends per type. One summary line at the end.
+- `SCRALL` consumes the **whole stack**, not just 300 — 300 is only the trigger.
+- Combat holds it; it resumes when combat ends.
+- On by default. `/sr dungeon` toggles it.
+
 ## Minimap button
 
 Reads **all six types at once** under a single confirmation. Free-form left-drag placement (exact position, no ring snapping; safe with scaled minimaps), with a badge showing the grand total held. *(The separate on-screen master button was removed in 1.2.2 — the bar and the minimap button cover both workflows.)*
@@ -43,6 +52,7 @@ Reads **all six types at once** under a single confirmation. Free-form left-drag
 | `/sr count` | Held counts per type, with item entry IDs |
 | `/sr bar` | Show/hide the six-button bar |
 | `/sr minimap` | Show/hide the minimap button |
+| `/sr dungeon` | Toggle dungeon-exit auto-read (Mastery/Delver at 300+) |
 | `/sr reset` | Reset all positions to defaults and show everything |
 
 ## Behavior notes
@@ -57,4 +67,4 @@ Reads **all six types at once** under a single confirmation. Free-form left-drag
 
 ## Saved variables
 
-`ScrollReaderDB` stores only positions and visibility (minimap button, bar). Delete it (or `/sr reset`) to restore defaults.
+`ScrollReaderDB` stores positions and visibility (minimap button, bar) and the dungeon auto-read toggle. Delete it (or `/sr reset`) to restore defaults.

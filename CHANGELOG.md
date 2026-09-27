@@ -1,5 +1,11 @@
 # ScrollReader — Changelog
 
+## v1.3.0 — 2026-09-27
+
+- **New: dungeon-exit auto-read** (idea borrowed from UncappedAutoScroll). ~5s after leaving a party instance, Scroll of Mastery and Scroll of the Delver are bulk-read automatically when 300+ are held. The chain spam-pushes `SCRALL` (keeps re-sending even on `used=0`) until bags are clean, capped at 40 sends per type. Combat holds it. On by default; `/sr dungeon` toggles.
+- A type whose chain is already running is no longer queued twice.
+- Reply-watchdog timeout now also clears that type's chain state.
+
 ## v1.2.3 — 2026-09-14
 
 - **Confirmation dialog removed** for all six types, by owner decision: every trigger (bar click, keybind, minimap, `/sr`) sends `SCRALL` immediately. The `SCRDONE` chat line is the receipt. Map auto-chain unchanged. Note this deliberately trades away the accidental-keypress safety net.

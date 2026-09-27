@@ -25,10 +25,15 @@
   Keybindings: Bindings.xml (auto-loaded by the client) exposes one binding per
   scroll type under ESC > Key Bindings > ScrollReader, each calling the global
   ScrollReader_BulkByIndex(i).
+
+  v1.3.0: dungeon-exit auto-read (borrowed from UncappedAutoScroll). ~5s after
+  leaving a party instance, Mastery and Delver are read if 300+ are held, and
+  the chain spam-pushes SCRALL (ignoring used=0) until bags are clean or the
+  CHAIN_MAX budget runs out. Toggle: /sr dungeon.
 ------------------------------------------------------------------------------]]
 
 local ADDON_NAME = "ScrollReader"
-local VERSION    = "1.2.3"
+local VERSION    = "1.3.0"
 local ICON       = "Interface\\Icons\\INV_Scroll_03"
 
 local TRANSPORT_PREFIX = "REAGENTBANK"  -- client -> server
@@ -48,6 +53,11 @@ local TYPES = {
     { title = "Scroll of Bounty",         entry = 500204 },
 }
 
+-- Dungeon-exit auto-read: only these TYPES indices, only at AUTO_MIN+ held.
+local AUTO_TYPES    = { 3, 4 }   -- Scroll of Mastery, Scroll of the Delver
+local AUTO_MIN      = 300
+local DUNGEON_DELAY = 5.0
+
 local TITLES = {}
 for i = 1, #TYPES do TITLES[TYPES[i].title] = i end
 
@@ -58,6 +68,7 @@ for i = 1, #TYPES do
 end
 
 local DEFAULTS = {
+    dungeon = true,
     minimap = { hide = false, x = -69, y = -40 },
     bar     = { hide = false, point = "CENTER", relPoint = "CENTER", x = 0, y = -240 },
 }
@@ -162,6 +173,10 @@ local pendingReply = {}    -- entry -> { name = ..., elapsed = 0 } awaiting SCRD
 local CHAIN_MAX = 40
 local chainBudget = {}     -- entry -> sends remaining in this confirmation
 local chainAgg = {}        -- entry -> { name, used, calls } for one summary line
+local chainSpam = {}       -- entry -> true: auto-read chain, re-send even on used=0
+
+local dungeonPending, dungeonWaited = false, 0
+local AutoRead             -- forward decl, assigned below
 
 local clock = CreateFrame("Frame")
 clock.sinceSend = SEND_GAP -- first send fires immediately
@@ -177,25 +192,54 @@ clock:SetScript("OnUpdate", function(self, elapsed)
     else
         self.sinceSend = SEND_GAP
     end
+    if dungeonPending then
+        dungeonWaited = dungeonWaited + elapsed
+        if dungeonWaited >= DUNGEON_DELAY then
+            dungeonPending = false
+            AutoRead()
+        end
+    end
     for entry, w in pairs(pendingReply) do
         w.elapsed = w.elapsed + elapsed
         if w.elapsed > REPLY_TIMEOUT then
             pendingReply[entry] = nil
+            chainBudget[entry], chainAgg[entry], chainSpam[entry] = nil, nil, nil
             Print("no server reply for " .. w.name .. " (entry " .. entry .. ") — " ..
                   "SCRALL may not cover this scroll yet; ask kirei to whitelist entry " .. entry .. ".")
         end
     end
 end)
 
-local function QueueConsume(recs)
+local function QueueConsume(recs, spam)
     for i = 1, #recs do
         local rec = recs[i]
-        if rec.count > 0 and rec.entry then
+        -- Skip a type whose chain is already running (queued or awaiting reply).
+        if rec.count > 0 and rec.entry and not chainBudget[rec.entry] then
             sendQueue[#sendQueue + 1] = { entry = rec.entry, name = rec.title }
             chainBudget[rec.entry] = CHAIN_MAX
             chainAgg[rec.entry] = { name = rec.title, used = 0, calls = 0 }
+            chainSpam[rec.entry] = spam or nil
         end
     end
+end
+
+-- Dungeon-exit auto-read: Mastery/Delver at AUTO_MIN+, spam-pushed.
+AutoRead = function()
+    if not db.dungeon then return end
+    local recs = ScanBags()
+    local picks = {}
+    for _, i in ipairs(AUTO_TYPES) do
+        if recs[i].count >= AUTO_MIN then picks[#picks + 1] = recs[i] end
+    end
+    if #picks == 0 then return end
+    Print("dungeon exit — auto-reading " .. #picks .. " scroll type(s) held " .. AUTO_MIN .. "+.")
+    QueueConsume(picks, true)   -- combat holds the queue, resumes after
+end
+
+local wasInDungeon = false
+local function InDungeon()
+    local inInstance, instanceType = IsInInstance()
+    return inInstance and instanceType == "party"
 end
 
 ---------------------------------------------------------------- confirm/use --
@@ -447,10 +491,14 @@ SlashCmdList["SCROLLREADER"] = function(msg)
         ToggleFrame("bar", bar)
     elseif msg == "minimap" then
         ToggleFrame("minimap", minimapButton)
+    elseif msg == "dungeon" then
+        db.dungeon = not db.dungeon
+        Print("dungeon-exit auto-read (Mastery/Delver at " .. AUTO_MIN .. "+): " ..
+              (db.dungeon and "on" or "off") .. ".")
     elseif msg == "reset" then
         ResetPositions()
     else
-        Print("commands: /sr (read all), /sr count, /sr bar, /sr minimap, /sr reset")
+        Print("commands: /sr (read all), /sr count, /sr bar, /sr minimap, /sr dungeon, /sr reset")
     end
 end
 
@@ -459,6 +507,8 @@ end
 local f = CreateFrame("Frame")
 f:RegisterEvent("ADDON_LOADED")
 f:RegisterEvent("PLAYER_LOGIN")
+f:RegisterEvent("PLAYER_ENTERING_WORLD")
+f:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 f:RegisterEvent("PLAYER_REGEN_DISABLED")
 f:RegisterEvent("PLAYER_REGEN_ENABLED")
 f:RegisterEvent("BAG_UPDATE")
@@ -480,9 +530,10 @@ f:SetScript("OnEvent", function(self, event, a1, a2)
             agg.used  = agg.used + used
             agg.calls = agg.calls + 1
         end
-        -- Chain while the server is still spending AND our bags still hold the
-        -- type (bag scan, not `held` — see the chain comment above).
-        if used > 0 and (chainBudget[entry] or 0) > 0 then
+        -- Chain while the server is still spending (or this is an auto-read
+        -- spam chain) AND our bags still hold the type (bag scan, not `held` —
+        -- see the chain comment above).
+        if (used > 0 or chainSpam[entry]) and (chainBudget[entry] or 0) > 0 then
             local recs = ScanBags()
             for i = 1, #recs do
                 if recs[i].title == w.name and recs[i].count > 0 then
@@ -495,7 +546,7 @@ f:SetScript("OnEvent", function(self, event, a1, a2)
         -- Chain finished (or was never needed).
         local totalUsed = agg and agg.used or used
         local calls     = agg and agg.calls or 1
-        chainBudget[entry], chainAgg[entry] = nil, nil
+        chainBudget[entry], chainAgg[entry], chainSpam[entry] = nil, nil, nil
         -- The Dashboard's UncappedScrolls prints its own "[Scrolls]" line for
         -- every SCRDONE it sees; when it's loaded, ours would be a duplicate.
         if _G.UncappedScrolls then return end
@@ -530,6 +581,12 @@ f:SetScript("OnEvent", function(self, event, a1, a2)
         if UnitAffectingCombat("player") then
             SetCombatState(true)
         end
+    elseif event == "PLAYER_ENTERING_WORLD" or event == "ZONE_CHANGED_NEW_AREA" then
+        local nowIn = InDungeon()
+        if wasInDungeon and not nowIn and db and db.dungeon then
+            dungeonPending, dungeonWaited = true, 0
+        end
+        wasInDungeon = nowIn
     elseif event == "PLAYER_REGEN_DISABLED" then
         SetCombatState(true)
     elseif event == "PLAYER_REGEN_ENABLED" then
