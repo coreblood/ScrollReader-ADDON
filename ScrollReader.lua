@@ -33,7 +33,7 @@
 ------------------------------------------------------------------------------]]
 
 local ADDON_NAME = "ScrollReader"
-local VERSION    = "1.3.1"
+local VERSION    = "1.3.2"
 local ICON       = "Interface\\Icons\\INV_Scroll_03"
 
 local TRANSPORT_PREFIX = "REAGENTBANK"  -- client -> server
@@ -54,7 +54,7 @@ local TYPES = {
 }
 
 -- Dungeon-exit auto-read: only these TYPES indices, only at AUTO_MIN+ held.
-local AUTO_TYPES    = { 3, 4 }   -- Scroll of Mastery, Scroll of the Delver
+local AUTO_TYPES    = { 3 }   -- Scroll of Mastery (Delver disabled — server doesn't send SCRDONE)
 local AUTO_MIN      = 1
 local DUNGEON_DELAY = 5.0
 
